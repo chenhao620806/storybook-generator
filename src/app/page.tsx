@@ -37,6 +37,115 @@ interface GeneratedContent {
   rawScript: string;
 }
 
+interface ImageCardProps {
+  url: string;
+  sceneIndex: number;
+  narrative: string;
+  visualDescription: string;
+  story: StoryData;
+  onRefresh: (newUrl: string) => void;
+}
+
+function ImageCard({ url, sceneIndex, narrative, visualDescription, story, onRefresh }: ImageCardProps) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setIsLoading(true);
+    
+    // 生成新的图片 URL（添加时间戳避免缓存）
+    const newUrl = generatePollinationsUrl(story, sceneIndex, true);
+    onRefresh(newUrl);
+    
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
+
+  const downloadImage = async (imgUrl: string, filename: string) => {
+    try {
+      const response = await fetch(imgUrl);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      link.click();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("下载失败:", err);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="relative aspect-[4/3] rounded-lg overflow-hidden border-2 border-purple-200 dark:border-purple-800 bg-slate-100 dark:bg-slate-800">
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Spinner className="w-8 h-8" />
+          </div>
+        )}
+        <img
+          src={url}
+          alt={`场景 ${sceneIndex + 1}`}
+          className={`w-full h-full object-cover transition-opacity duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
+          onLoad={() => setIsLoading(false)}
+          onError={() => setIsLoading(false)}
+        />
+        {isRefreshing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <Spinner className="w-8 h-8 text-white" />
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-between">
+        <Badge variant="outline" className="bg-purple-50 dark:bg-purple-900">
+          场景 {sceneIndex + 1}
+        </Badge>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="刷新此图片"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => downloadImage(url, `story-scene-${sceneIndex + 1}.png`)}
+          >
+            <Download className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+      {narrative && (
+        <p className="text-xs text-muted-foreground p-2 bg-slate-50 dark:bg-slate-800 rounded">
+          {narrative}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function generatePollinationsUrl(story: StoryData, sceneIndex: number, forceRefresh: boolean = false): string {
+  const scene = story.scenes[sceneIndex];
+  const { mainCharacter } = story;
+
+  const prompt = `Children's storybook illustration, Scene ${sceneIndex + 1}/4. ` +
+    `Story: "${story.title}". ` +
+    `Character: ${mainCharacter.name} - ${mainCharacter.appearance}. ` +
+    `Scene description: ${scene.visualDescription}. ` +
+    `Style: cute children's book watercolor illustration, warm colors, soft lines, ` +
+    `child-friendly, adorable cartoon style, consistent character design.`;
+
+  const encodedPrompt = encodeURIComponent(prompt);
+  const timestamp = forceRefresh ? `&t=${Date.now()}` : "";
+  
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&n=1&model=flux${timestamp}`;
+}
+
 export default function StorybookGenerator() {
   const [topic, setTopic] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -137,22 +246,14 @@ export default function StorybookGenerator() {
     setError(null);
 
     try {
-      const response = await fetch("/api/story/generate-images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ story: generatedContent.story }),
+      // 生成图片 URL（前端直接生成，支持后续刷新）
+      const imageUrls = generatedContent.story.scenes.map((_, index) => {
+        return generatePollinationsUrl(generatedContent.story!, index);
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "生成图片失败");
-      }
-
-      const data = await response.json();
 
       setGeneratedContent((prev) => ({
         ...prev,
-        images: data.imageUrls,
+        images: imageUrls,
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成图片失败");
@@ -164,10 +265,6 @@ export default function StorybookGenerator() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
-
-  const downloadImage = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -307,39 +404,27 @@ export default function StorybookGenerator() {
                     绘本插画
                   </CardTitle>
                   <CardDescription>
-                  使用 Pollinations.AI 生成，保持画风一致
+                    点击刷新按钮可重新生成单张图片
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {generatedContent.images.map((url, index) => (
-                      <div key={index} className="space-y-2">
-                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border-2 border-purple-200 dark:border-purple-800">
-                          <img
-                            src={url}
-                            alt={`场景 ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <Badge variant="outline" className="bg-purple-50 dark:bg-purple-900">
-                            场景 {index + 1}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => downloadImage(url, `story-scene-${index + 1}.png`)}
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            下载
-                          </Button>
-                        </div>
-                        {generatedContent.story?.scenes[index] && (
-                          <p className="text-xs text-muted-foreground p-2 bg-slate-50 dark:bg-slate-800 rounded">
-                            {generatedContent.story.scenes[index].narrative}
-                          </p>
-                        )}
-                      </div>
+                      <ImageCard
+                        key={index}
+                        url={url}
+                        sceneIndex={index}
+                        narrative={generatedContent.story?.scenes[index]?.narrative || ""}
+                        visualDescription={generatedContent.story?.scenes[index]?.visualDescription || ""}
+                        story={generatedContent.story!}
+                        onRefresh={(newUrl) => {
+                          setGeneratedContent(prev => {
+                            const newImages = [...prev.images];
+                            newImages[index] = newUrl;
+                            return { ...prev, images: newImages };
+                          });
+                        }}
+                      />
                     ))}
                   </div>
                 </CardContent>
