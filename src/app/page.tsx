@@ -307,7 +307,7 @@ export default function StorybookGenerator() {
                     绘本插画
                   </CardTitle>
                   <CardDescription>
-                    使用 Seedream 4.5 sequential image generation 生成，保持画风一致
+                  使用 Pollinations.AI 生成，保持画风一致
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
@@ -459,7 +459,7 @@ export default function StorybookGenerator() {
 
         {/* Footer */}
         <footer className="mt-16 text-center text-sm text-muted-foreground">
-          <p>Powered by Seedream 4.5 Sequential Image Generation & Doubao LLM</p>
+          <p>Powered by Doubao LLM & Pollinations.AI</p>
         </footer>
       </div>
     </div>

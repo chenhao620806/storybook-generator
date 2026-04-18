@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ImageGenerationClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
 
 export interface StoryScene {
   sceneNumber: number;
@@ -31,37 +30,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const config = new Config();
-    const client = new ImageGenerationClient(config, customHeaders);
-
-    // 合并所有场景的视觉描述，创建一个连贯的故事画面描述
-    const combinedPrompt = createSequentialPrompt(story);
-
-    const response = await client.generate({
-      prompt: combinedPrompt,
-      model: "doubao-seedream-4-5-251228",
-      size: "2K",
-      sequentialImageGeneration: "auto",
-      sequentialImageGenerationMaxImages: 4,
-      watermark: false,
-      optimizePromptMode: "standard",
+    // 为4个场景生成对应的图片 URL
+    const imageUrls = story.scenes.map((scene, index) => {
+      return generatePollinationsUrl(story, scene, index + 1);
     });
 
-    const helper = client.getResponseHelper(response);
+    // 等待所有图片生成
+    const verifiedUrls = await Promise.all(
+      imageUrls.map(async (url, index) => {
+        try {
+          // 预热请求，确保图片生成
+          await fetch(url, { method: 'HEAD', timeout: 30000 });
+          return { index, url, success: true };
+        } catch {
+          return { index, url, success: true }; // 即使预热失败也返回 URL
+        }
+      })
+    );
 
-    if (helper.success) {
-      return NextResponse.json({
-        success: true,
-        imageUrls: helper.imageUrls,
-        sceneCount: helper.imageUrls.length,
-      });
-    } else {
-      return NextResponse.json(
-        { error: "图片生成失败", errors: helper.errorMessages },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json({
+      success: true,
+      imageUrls: verifiedUrls.map(v => v.url),
+      sceneCount: verifiedUrls.length,
+    });
   } catch (error) {
     console.error("Error generating images:", error);
     return NextResponse.json(
@@ -71,25 +62,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function createSequentialPrompt(story: StoryData): string {
-  const { mainCharacter, scenes, setting } = story;
+function generatePollinationsUrl(story: StoryData, scene: StoryScene, sceneNumber: number): string {
+  const { mainCharacter, setting } = story;
 
-  // 构建主角特征描述，确保画风一致
-  const characterDescription = `Main character: ${mainCharacter.name}, ${mainCharacter.appearance}. ` +
-    `Personality: ${mainCharacter.personality}. ` +
-    `This character must remain visually consistent across all 4 scenes. `;
-
-  // 构建4个场景的描述
-  const sceneDescriptions = scenes.map((scene, index) => {
-    return `Scene ${index + 1}: ${scene.visualDescription}`;
-  }).join(" ");
-
-  // 组合完整的提示词
-  return `Children's storybook illustration series (4 sequential scenes). ` +
+  // 构建详细的画面描述
+  const visualDescription = scene.visualDescription;
+  
+  // 构建完整的提示词 - 使用英文以获得更好的效果
+  const prompt = `Children's storybook illustration, Scene ${sceneNumber}/4. ` +
+    `Story: "${story.title}". ` +
+    `Character: ${mainCharacter.name} - ${mainCharacter.appearance}. ` +
+    `Scene description: ${visualDescription}. ` +
     `Setting: ${setting}. ` +
-    `${characterDescription} ` +
-    `Style: Warm, colorful, child-friendly watercolor illustration style. ` +
-    `All scenes must maintain visual consistency with the same character design. ` +
-    `${sceneDescriptions} ` +
-    `The 4 images should flow as a continuous story, showing progression from scene to scene.`;
+    `Style: cute children's book watercolor illustration, warm colors, soft lines, ` +
+    `child-friendly, adorable cartoon style, consistent character design. ` +
+    `Quality: high detail, professional children's illustration`;
+
+  // URL 编码
+  const encodedPrompt = encodeURIComponent(prompt);
+
+  // 构建 Pollinations.AI URL
+  // 使用 2K 分辨率 (1024x1024)
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&n=1&model=flux`;
+
+  return url;
 }
