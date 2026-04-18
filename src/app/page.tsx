@@ -265,17 +265,6 @@ export default function StorybookGenerator() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = filename;
-      link.click();
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      setError("下载失败，请重试");
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-purple-50 dark:from-slate-900 dark:via-slate-900 dark:to-purple-950">
