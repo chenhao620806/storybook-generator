@@ -335,6 +335,33 @@ export default function StorybookGenerator() {
           </p>
         </header>
 
+        {/* Login Required Alert */}
+        {!user && !userLoading && (
+          <Card className="mb-6 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-full">
+                  <User className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-amber-800 dark:text-amber-200 font-medium">
+                    需要登录才能生成绘本
+                  </p>
+                  <p className="text-amber-600 dark:text-amber-400 text-sm">
+                    登录后可以保存您的创作记录
+                  </p>
+                </div>
+                <Button
+                  onClick={() => router.push("/auth")}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  立即登录
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Input Section */}
         <Card className="mb-8 shadow-lg border-purple-100 dark:border-purple-900">
           <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 rounded-t-lg">
@@ -357,7 +384,14 @@ export default function StorybookGenerator() {
                 className="text-lg py-6 border-purple-200 focus:border-purple-500 dark:border-purple-800"
               />
               <Button
-                onClick={generateStory}
+                onClick={() => {
+                  if (!user) {
+                    toast.error("请先登录后再生成绘本");
+                    router.push("/auth");
+                    return;
+                  }
+                  generateStory();
+                }}
                 disabled={isGenerating || isGeneratingImages || !topic.trim()}
                 className="py-6 px-8 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
               >
@@ -369,7 +403,7 @@ export default function StorybookGenerator() {
                 ) : (
                   <>
                     <Sparkles className="mr-2" />
-                    生成绘本
+                    {user ? "生成绘本" : "登录后生成"}
                   </>
                 )}
               </Button>
