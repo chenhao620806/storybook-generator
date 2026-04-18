@@ -541,12 +541,25 @@ export default function StorybookGenerator() {
 }
 
 function parseStoryScript(script: string): StoryData | null {
+  // 清理可能的 markdown 代码块标记
+  let cleanedScript = script
+    .replace(/```json\s*/g, "")
+    .replace(/```\s*/g, "");
+
   // 尝试提取 JSON 部分
-  const jsonMatch = script.match(/\{[\s\S]*\}/);
+  const jsonMatch = cleanedScript.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
 
+  let jsonStr = jsonMatch[0];
+
+  // 修复常见的 JSON 格式问题
+  // 1. 修复字段名缺失（如 """scenes" 变成 "scenes"）
+  jsonStr = jsonStr.replace(/"""(\w+)":/g, '"$1":');
+  // 2. 修复多余的逗号
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1");
+
   try {
-    const story = JSON.parse(jsonMatch[0]);
+    const story = JSON.parse(jsonStr);
 
     // 验证必需字段
     if (!story.title || !story.mainCharacter || !story.scenes || story.scenes.length < 4) {
@@ -554,7 +567,9 @@ function parseStoryScript(script: string): StoryData | null {
     }
 
     return story as StoryData;
-  } catch {
+  } catch (e) {
+    console.error("JSON parse error:", e);
+    console.error("Problematic JSON:", jsonStr.substring(0, 500));
     return null;
   }
 }

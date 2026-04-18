@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LLMClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
 
 const SYSTEM_PROMPT = `你是一个专业的儿童绘本作家。请根据用户给定的主题，创作一个温馨、有趣的儿童绘本故事。
 
@@ -10,7 +9,8 @@ const SYSTEM_PROMPT = `你是一个专业的儿童绘本作家。请根据用户
 4. 主角需要有明确的外貌和性格特征描述（用于保证画风一致）
 5. 故事需要有教育意义或积极的主题
 
-请按以下 JSON 格式输出故事脚本：
+【重要】请严格按照以下 JSON 格式输出，不要添加任何其他文字说明，只输出纯 JSON：
+
 {
   "title": "故事标题",
   "mainCharacter": {
@@ -48,10 +48,16 @@ const SYSTEM_PROMPT = `你是一个专业的儿童绘本作家。请根据用户
   "moral": "故事寓意"
 }
 
-请确保：
-1. visualDescription 足够详细，包含主角的外貌特征、服装、表情、动作等
-2. 4个场景的画面风格保持一致
-3. 每个场景的描述都是一个独立的、完整的画面`;
+【严格要求】
+1. 必须包含完整的 JSON 字段：title, mainCharacter, setting, scenes, moral
+2. scenes 必须是包含 4 个场景对象的数组
+3. 每个场景必须包含：sceneNumber, visualDescription, narrative
+4. visualDescription 要足够详细，包含主角外貌、服装、表情、动作、环境
+5. 只输出 JSON，不要 markdown 代码块，不要额外解释`;
+
+// Moonshot API 配置
+const MOONSHOT_API_KEY = process.env.MOONSHOT_API_KEY;
+const MOONSHOT_BASE_URL = "https://api.moonshot.cn/v1";
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,9 +70,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const config = new Config();
-    const client = new LLMClient(config, customHeaders);
+    // 检查 API Key
+    if (!MOONSHOT_API_KEY) {
+      return NextResponse.json(
+        { error: "未配置 MOONSHOT_API_KEY 环境变量" },
+        { status: 500 }
+      );
+    }
 
     const messages = [
       { role: "system" as const, content: SYSTEM_PROMPT },
@@ -76,21 +86,47 @@ export async function POST(request: NextRequest) {
       },
     ];
 
-    const stream = client.stream(messages, {
-      model: "doubao-seed-2-0-pro-260215",
-      temperature: 0.9,
+    // 调用 Moonshot API - 使用非流式输出以获得更稳定的 JSON
+    const response = await fetch(`${MOONSHOT_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${MOONSHOT_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "moonshot-v1-8k",
+        messages,
+        temperature: 0.7,
+        stream: false,
+      }),
     });
 
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Moonshot API error:", error);
+      return NextResponse.json(
+        { error: "调用 AI 服务失败，请重试" },
+        { status: 500 }
+      );
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+
+    // 模拟流式输出
     const encoder = new TextEncoder();
     const streamData = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of stream) {
-            if (chunk.content) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ content: chunk.content.toString() })}\n\n`)
-              );
-            }
+          // 将内容分块发送，模拟流式效果
+          const chunkSize = 10;
+          for (let i = 0; i < content.length; i += chunkSize) {
+            const chunk = content.slice(i, i + chunkSize);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
+            );
+            // 小延迟模拟打字效果
+            await new Promise(resolve => setTimeout(resolve, 10));
           }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
           controller.close();
