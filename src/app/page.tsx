@@ -1,7 +1,8 @@
 "use client";
 
 import type { Metadata } from "next";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, BookOpen, ImageIcon, Download, Copy, RefreshCw } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Sparkles, BookOpen, ImageIcon, Download, Copy, RefreshCw, User, LogOut } from "lucide-react";
+import { useUser } from "@/hooks/useUser";
+import { toast } from "sonner";
 
 interface StoryScene {
   sceneNumber: number;
@@ -157,6 +167,8 @@ export default function StorybookGenerator() {
   });
   const [displayedScript, setDisplayedScript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { user, loading: userLoading, signOut } = useUser();
+  const router = useRouter();
   const scriptRef = useRef<string>("");
 
   const generateStory = useCallback(async () => {
@@ -271,12 +283,52 @@ export default function StorybookGenerator() {
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <header className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Sparkles className="w-10 h-10 text-purple-600 dark:text-purple-400" />
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              儿童绘本生成器
-            </h1>
-            <Sparkles className="w-10 h-10 text-pink-600 dark:text-pink-400" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex-1" />
+            <div className="flex items-center justify-center gap-3 flex-1">
+              <Sparkles className="w-10 h-10 text-purple-600 dark:text-purple-400" />
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                儿童绘本生成器
+              </h1>
+              <Sparkles className="w-10 h-10 text-pink-600 dark:text-pink-400" />
+            </div>
+            <div className="flex-1 flex justify-end">
+              {!userLoading && (
+                <>
+                  {user ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className="bg-purple-100 text-purple-600">
+                              {user.email?.charAt(0).toUpperCase() || "U"}
+                            </AvatarFallback>
+                          </Avatar>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem className="text-sm text-muted-foreground">
+                          {user.email}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { signOut(); toast.success("已退出登录"); }}>
+                          <LogOut className="mr-2 h-4 w-4" />
+                          退出登录
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push("/auth")}
+                      className="border-purple-200 hover:bg-purple-50"
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      登录
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <p className="text-lg text-muted-foreground dark:text-slate-400 max-w-2xl mx-auto">
             输入一个主题，让 AI 为你创作温馨有趣的儿童绘本故事，并生成配套的精美插画
